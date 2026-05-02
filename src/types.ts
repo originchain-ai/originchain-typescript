@@ -186,6 +186,68 @@ export type LogsResponse = {
   fetched_at: string;
 };
 
+/** One per-shape tile on `/app/metrics`. The backend may return `null`
+ * for `p99_ms` / `qps` when the engine doesn't yet emit the underlying
+ * counter — render "—" rather than fabricating a number. `enabled` is
+ * sourced from the real `tenant_addons` row. */
+export type ShapeStat = {
+  p99_ms: number | null;
+  qps: number | null;
+  enabled: boolean;
+};
+
+/** Storage panel on `/app/metrics`. v0 returns nulls for every field
+ * because the engine doesn't expose a per-shape size diagnostic yet;
+ * the frontend renders dashes. */
+export type StorageBreakdown = {
+  rows_gb: number | null;
+  indexes_gb: number | null;
+  vectors_gb: number | null;
+  fts_gb: number | null;
+};
+
+/** Mirrors `observe::handlers::MetricsSummaryResponse`. */
+export type MetricsSummaryResponse = {
+  shapes: Record<string, ShapeStat>;
+  storage: StorageBreakdown;
+};
+
+/** One sealed segment / checkpoint shipped to S3 by `oc-pitr`. Mirrors
+ * `observe::handlers::ArchiveSegment`. */
+export type ArchiveSegment = {
+  lsn_start: number;
+  lsn_end: number;
+  sealed_at: string | null;
+  sha256: string | null;
+  size_bytes: number;
+  compressed: boolean;
+  kind: "segment" | "checkpoint";
+  s3_key: string;
+};
+
+/** Mirrors `observe::handlers::PitrArchiveResponse`. */
+export type PitrArchiveResponse = {
+  segments: ArchiveSegment[];
+  tail_status: "active" | "paused" | "unknown";
+  rpo_seconds: number | null;
+};
+
+/** One line on the usage breakdown. `kind` is the canonical group
+ * compute / addon / overage. */
+export type UsageLine = {
+  kind: "compute" | "addon" | "overage";
+  name: string;
+  amount_usd: number;
+};
+
+/** Mirrors `usage::handlers::CurrentUsageResponse`. */
+export type CurrentUsageResponse = {
+  period_start: string;
+  period_end: string;
+  lines: UsageLine[];
+  total_usd: number;
+};
+
 // ── Engine: SQL ──────────────────────────────────────────────────────────
 
 export type SqlReq = { sql: string; params?: unknown[] };

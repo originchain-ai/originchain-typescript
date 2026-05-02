@@ -26,6 +26,7 @@ import type {
   ClientOptions,
   ConfirmPaymentBody,
   ConfirmPaymentMethodBody,
+  CurrentUsageResponse,
   DijkstraResult,
   Eligibility,
   EventView,
@@ -37,8 +38,10 @@ import type {
   Instance,
   LogsResponse,
   MetricsResponse,
+  MetricsSummaryResponse,
   PaymentMethodView,
   PendingPaymentResponse,
+  PitrArchiveResponse,
   Plan,
   PlansResponse,
   ProvisionResponse,
@@ -596,6 +599,23 @@ class InstancesMethods {
       `/v1/instances/${id}/metrics?minutes=${minutes}&period=${period}`,
     );
   }
+  /// Per-shape latency tiles + storage panel rollup. Sibling of
+  /// `metrics()`; the time-series endpoint stays unchanged. The
+  /// backend may return `null` for `p99_ms`, `qps`, or any storage
+  /// component when the engine doesn't yet emit the underlying
+  /// counter — callers should render "—" rather than fabricate.
+  metricsSummary(id: string) {
+    return this.p._request<MetricsSummaryResponse>(
+      `/v1/instances/${id}/metrics-summary`,
+    );
+  }
+  /// Sealed-segment archive listing. Read-only — pause/resume of the
+  /// tail-shipper is operator-only and intentionally absent.
+  pitrArchive(id: string) {
+    return this.p._request<PitrArchiveResponse>(
+      `/v1/instances/${id}/pitr/archive`,
+    );
+  }
   logs(id: string, tail = 200) {
     return this.p._request<LogsResponse>(`/v1/instances/${id}/logs?tail=${tail}`);
   }
@@ -711,6 +731,13 @@ class BillingMethods {
       method: "DELETE",
     });
   }
+  /// Current-period billing rollup, per-org. Compute + addon line
+  /// items from the DB, plus a placeholder overage line at $0 until
+  /// usage metering is wired. The frontend's `/app/billing/usage`
+  /// page renders this directly.
+  currentUsage() {
+    return this.p._request<CurrentUsageResponse>("/v1/usage/current");
+  }
 }
 
 class EventsMethods {
@@ -728,12 +755,15 @@ export type {
   AuthResponse,
   ClientOptions,
   ConfirmPaymentBody,
+  CurrentUsageResponse,
   Eligibility,
   EventView,
   Instance,
   LogsResponse,
   MetricsResponse,
+  MetricsSummaryResponse,
   PaymentMethodView,
+  PitrArchiveResponse,
   Plan,
   PlansResponse,
   ProvisionResponse,
