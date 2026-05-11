@@ -92,6 +92,38 @@ function joinUrl(base: string, path: string): string {
   return base.replace(/\/$/, "") + path;
 }
 
+/** Generate a fresh `Idempotency-Key` value (UUIDv4 in canonical hyphenated
+ * form). Used for every write the SDK makes so a network retry is safe by
+ * default — the engine's idempotency cache LRU-evicts at 10k entries with
+ * a 24h TTL, so a fresh key per call is fine. Callers who need a stable key
+ * across process restarts (e.g. distributed retries of the same logical
+ * action) can pass `init.headers["idempotency-key"]` explicitly. */
+function newIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  // Fallback for older runtimes that have getRandomValues but no randomUUID.
+  if (c && typeof c.getRandomValues === "function") {
+    const b = new Uint8Array(16);
+    c.getRandomValues(b);
+    b[6] = (b[6]! & 0x0f) | 0x40; // version 4
+    b[8] = (b[8]! & 0x3f) | 0x80; // variant 1
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, "0"));
+    return `${h.slice(0, 4).join("")}-${h.slice(4, 6).join("")}-${h.slice(6, 8).join("")}-${h.slice(8, 10).join("")}-${h.slice(10, 16).join("")}`;
+  }
+  // Last-resort: Math.random. Documented unsafe for cryptographic uniqueness
+  // but the idempotency key only needs to be unique-enough within the
+  // engine's 10k LRU cache, not unguessable.
+  let out = "";
+  for (let i = 0; i < 16; i++) {
+    const r = (Math.random() * 256) | 0;
+    out += r.toString(16).padStart(2, "0");
+    if (i === 3 || i === 5 || i === 7 || i === 9) out += "-";
+  }
+  return out;
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 async function readBody(res: Response): Promise<unknown> {
   if (res.status === 204) return undefined;
   const text = await res.text();
@@ -162,7 +194,10 @@ export class OriginChainClient {
     this.bearer = opts.bearer;
     this.tenantId = opts.tenantId ?? tenantIdFromEndpoint(this.baseUrl);
     this.fetch = pickFetch(opts.fetch);
-    this.timeoutMs = opts.timeoutMs ?? 30000;
+    // Default 60 s. The dashboard's snapshot listing endpoint can take
+    // 20-40 s on its first (uncached) call against the managed snapshot
+    // service; later calls hit a 5-min response cache on the backend.
+    this.timeoutMs = opts.timeoutMs ?? 60000;
     this.graph = new GraphMethods(this);
   }
 
@@ -180,6 +215,14 @@ export class OriginChainClient {
     };
     if (!init.rawBody && init.body !== undefined) {
       headers["content-type"] ??= "application/json";
+    }
+    // Mutating requests get an Idempotency-Key by default. Server-side cache
+    // is bounded (LRU 10k + 24h TTL) so fresh-per-call is safe. Callers that
+    // need a stable key (e.g. distributed retry of the same logical action)
+    // override by passing `init.headers["idempotency-key"]` themselves.
+    const method = (init.method ?? "GET").toUpperCase();
+    if (MUTATING_METHODS.has(method) && !headers["idempotency-key"]) {
+      headers["idempotency-key"] = newIdempotencyKey();
     }
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
@@ -477,7 +520,10 @@ export class OriginChainAdminClient {
       throw new Error("OriginChainAdminClient: baseUrl required");
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
     this.fetch = pickFetch(opts.fetch);
-    this.timeoutMs = opts.timeoutMs ?? 30000;
+    // Default 60 s. The dashboard's snapshot listing endpoint can take
+    // 20-40 s on its first (uncached) call against the managed snapshot
+    // service; later calls hit a 5-min response cache on the backend.
+    this.timeoutMs = opts.timeoutMs ?? 60000;
     this.credentials = opts.credentials ?? "include";
     this.bearer = opts.bearer;
     this.auth = new AuthMethods(this);
@@ -502,6 +548,15 @@ export class OriginChainAdminClient {
       headers["content-type"] ??= "application/json";
     }
     if (this.bearer) headers["authorization"] = `Bearer ${this.bearer}`;
+    // Auto-Idempotency-Key on mutating control-plane calls. Operation-backend
+    // doesn't enforce idempotency today (the body is harmless and ignored),
+    // but stamping the header keeps the wire shape consistent with the engine
+    // client and lets us light it up on the control plane without a SDK
+    // version bump later.
+    const method = (init.method ?? "GET").toUpperCase();
+    if (MUTATING_METHODS.has(method) && !headers["idempotency-key"]) {
+      headers["idempotency-key"] = newIdempotencyKey();
+    }
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
     try {
@@ -559,6 +614,23 @@ class AuthMethods {
     return this.p._request<{ revoked: number }>(
       "/v1/auth/sessions/revoke-all",
       { method: "POST" },
+    );
+  }
+  /** Request a password-reset email. The backend always returns
+   *  `{ sent: true }` regardless of whether the email is registered —
+   *  do not surface "no such user" hints in the UI. */
+  forgotPassword(body: { email: string }) {
+    return this.p._request<{ sent: boolean }>(
+      "/v1/auth/forgot-password",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  /** Redeem a reset token + set a new password. The backend revokes
+   *  every active session for the user as a side effect. */
+  resetPassword(body: { token: string; new_password: string }) {
+    return this.p._request<void>(
+      "/v1/auth/reset-password",
+      { method: "POST", body: JSON.stringify(body) },
     );
   }
 }
