@@ -59,9 +59,56 @@ describe("OriginChainClient", () => {
     const headers = c!.init.headers as Record<string, string>;
     expect(headers["authorization"]).toBe(`Bearer ${BEARER}`);
     expect(headers["content-type"]).toBe("application/json");
+    // Mutating call must auto-attach Idempotency-Key in canonical UUIDv4
+    // shape so a network retry deduplicates against the engine's idem
+    // cache. A regression that stops sending the header would turn every
+    // flaky network into a duplicate write.
+    expect(headers["idempotency-key"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(JSON.parse(c!.init.body as string)).toEqual({
       sql: "SELECT id, email FROM shop.customers LIMIT 1",
     });
+  });
+
+  it("auto-generates Idempotency-Key on every mutating call", async () => {
+    const { fetch, calls } = mockFetch(200, { kind: "select", rows: [] });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    await oc.sql("SELECT 1");
+    await oc.sql("SELECT 2");
+    const k1 = (calls[0]!.init.headers as Record<string, string>)[
+      "idempotency-key"
+    ];
+    const k2 = (calls[1]!.init.headers as Record<string, string>)[
+      "idempotency-key"
+    ];
+    expect(k1).toBeTruthy();
+    expect(k2).toBeTruthy();
+    expect(k1).not.toBe(k2); // fresh per call
+  });
+
+  it("caller-supplied Idempotency-Key wins over the auto-generated one", async () => {
+    const { fetch, calls } = mockFetch(200, { id: "demo.x", tenant: "t" });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    // registerSchema doesn't expose a key parameter, so we exercise the
+    // override path through the underlying _request. Mirrors the wire
+    // contract any future per-method override would use.
+    await oc._request("/v1/tenants/tnt-test/sql", {
+      method: "POST",
+      body: JSON.stringify({ sql: "SELECT 1" }),
+      headers: { "idempotency-key": "caller-stable-key" },
+    });
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers["idempotency-key"]).toBe("caller-stable-key");
+  });
+
+  it("does NOT attach Idempotency-Key to GET reads", async () => {
+    const { fetch, calls } = mockFetch(200, ["demo.users"]);
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    await oc.listSchemas();
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    // GETs must not consume an idempotency cache slot.
+    expect(headers["idempotency-key"]).toBeUndefined();
   });
 
   it("vectorTopk threads `mode: 'high_recall'` into the request body", async () => {
