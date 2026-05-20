@@ -145,6 +145,26 @@ const oc = new OriginChainClient({
 });
 ```
 
+## Performance: HTTP/2 in Node
+
+The engine speaks HTTP/2; browsers auto-negotiate it over ALPN. Node's
+built-in `fetch` (undici) defaults to HTTP/1.1 — bare SDK use works fine
+on h1, but for a multiplexed connection inject an undici dispatcher with
+`allowH2: true` (this is **optional**):
+
+```ts
+import { Agent, fetch as undiciFetch } from "undici";
+
+const dispatcher = new Agent({ allowH2: true });
+const client = new OriginChainClient({
+  bearer, tenant, baseUrl,
+  fetch: (url, init) => undiciFetch(url, { ...init, dispatcher }),
+});
+```
+
+`undici` ships with Node ≥ 18 but isn't a runtime dep of this SDK; install
+it explicitly (`npm i undici`) if you want this code path.
+
 ## Development
 
 ```bash
