@@ -2,6 +2,8 @@
 
 Official TypeScript / JavaScript client for [OriginChain](https://originchain.ai).
 
+> Other languages: Python → [`originchain`](https://pypi.org/project/originchain/) · Go → [`github.com/originchain-ai/originchain-go`](https://github.com/originchain-ai/originchain-go) · raw HTTP → [originchain.ai/docs](https://originchain.ai/docs).
+
 - **Runtime:** Node ≥ 18, modern browsers (ESM + CJS bundles shipped)
 - **Type-safe:** declarations bundled (`dist/index.d.ts`)
 - **Tree-shakable:** `"sideEffects": false`
