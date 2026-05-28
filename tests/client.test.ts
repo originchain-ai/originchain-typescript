@@ -1,5 +1,5 @@
 // Happy-path coverage for OriginChainClient. Every test injects a mock
-// `fetch` so we never touch the network — the SDK's plumbing (URL, headers,
+// `fetch` so we never touch the network - the SDK's plumbing (URL, headers,
 // body, response decode) is what we're verifying, not the engine itself.
 
 import { describe, expect, it, vi } from "vitest";
@@ -177,7 +177,7 @@ describe("OriginChainClient", () => {
       cost: 1,
       latency: 0.5,
     });
-    // Dijkstra is GET — no body should be sent.
+    // Dijkstra is GET - no body should be sent.
     expect(calls[0]!.init.body).toBeUndefined();
   });
 

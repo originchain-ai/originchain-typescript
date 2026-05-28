@@ -1,8 +1,8 @@
 // OriginChain TypeScript client.
 //
 // Two classes:
-//   * `OriginChainClient`     — talks to a per-tenant engine (bearer auth).
-//   * `OriginChainAdminClient` — talks to the control plane (cookie auth, or
+//   * `OriginChainClient`     - talks to a per-tenant engine (bearer auth).
+//   * `OriginChainAdminClient` - talks to the control plane (cookie auth, or
 //                                bearer when used from Node).
 //
 // They are split because the auth model is fundamentally different: the
@@ -94,7 +94,7 @@ function joinUrl(base: string, path: string): string {
 
 /** Generate a fresh `Idempotency-Key` value (UUIDv4 in canonical hyphenated
  * form). Used for every write the SDK makes so a network retry is safe by
- * default — the engine's idempotency cache LRU-evicts at 10k entries with
+ * default - the engine's idempotency cache LRU-evicts at 10k entries with
  * a 24h TTL, so a fresh key per call is fine. Callers who need a stable key
  * across process restarts (e.g. distributed retries of the same logical
  * action) can pass `init.headers["idempotency-key"]` explicitly. */
@@ -161,7 +161,7 @@ function raiseFor(status: number, body: unknown): never {
   if (body && typeof body === "object") {
     const e = body as ApiErrorBody;
     if (typeof e.error === "string") {
-      // Some endpoints return `{ "error": "snake_case_code" }` flat — map
+      // Some endpoints return `{ "error": "snake_case_code" }` flat - map
       // that into the `code` slot so callers can switch on it.
       code = e.error;
       message = e.error;
@@ -280,7 +280,7 @@ export class OriginChainClient {
   }
 
   /** Convenience: run a SELECT and return the first row, or `null`. Raises
-   * `ApiError` if the statement isn't a SELECT — there's no "first" of an
+   * `ApiError` if the statement isn't a SELECT - there's no "first" of an
    * INSERT or DELETE translation. */
   async sqlOne(
     query: string,
@@ -372,7 +372,7 @@ export class OriginChainClient {
    * `mode="boolean"` (default) AND-matches all tokens and returns unranked
    * `doc_id` strings. `mode="bm25"` returns the top-`k` hits ranked by BM25.
    * `mode="phrase"` requires the tokens in order. The response shape varies
-   * by mode — boolean/phrase return `string[]`, bm25 returns
+   * by mode - boolean/phrase return `string[]`, bm25 returns
    * `{ doc_id, score }[]`. */
   ftsSearch(
     table: string,
@@ -473,7 +473,7 @@ export class GraphMethods {
   }
 
   /** Dijkstra over a typed relation. The `weights` map is JSON-stringified
-   * into the `weights_json` query parameter (NOT a request body) — backend
+   * into the `weights_json` query parameter (NOT a request body) - backend
    * reads `q.weights_json`. */
   dijkstra(
     schema: string,
@@ -582,7 +582,7 @@ export class OriginChainAdminClient {
 
 // Sub-namespaces: each takes a private parent reference. They exist for
 // caller ergonomics (`admin.instances.list()` reads better than
-// `admin.listInstances()`) but stay thin — no state, no mutation.
+// `admin.listInstances()`) but stay thin - no state, no mutation.
 
 class AuthMethods {
   constructor(private readonly p: OriginChainAdminClient) {}
@@ -617,7 +617,7 @@ class AuthMethods {
     );
   }
   /** Request a password-reset email. The backend always returns
-   *  `{ sent: true }` regardless of whether the email is registered —
+   *  `{ sent: true }` regardless of whether the email is registered -
    *  do not surface "no such user" hints in the UI. */
   forgotPassword(body: { email: string }) {
     return this.p._request<{ sent: boolean }>(
@@ -675,13 +675,13 @@ class InstancesMethods {
   /// `metrics()`; the time-series endpoint stays unchanged. The
   /// backend may return `null` for `p99_ms`, `qps`, or any storage
   /// component when the engine doesn't yet emit the underlying
-  /// counter — callers should render "—" rather than fabricate.
+  /// counter - callers should render "-" rather than fabricate.
   metricsSummary(id: string) {
     return this.p._request<MetricsSummaryResponse>(
       `/v1/instances/${id}/metrics-summary`,
     );
   }
-  /// Sealed-segment archive listing. Read-only — pause/resume of the
+  /// Sealed-segment archive listing. Read-only - pause/resume of the
   /// tail-shipper is operator-only and intentionally absent.
   pitrArchive(id: string) {
     return this.p._request<PitrArchiveResponse>(

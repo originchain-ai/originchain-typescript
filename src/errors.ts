@@ -22,7 +22,7 @@ export class ApiError extends Error {
 }
 
 // HTTP 402 Payment Required + canonical add-on body. Mirrors the wire shape
-// documented in `oc-addon-entitlements-spec.md` — `snake_case` from the
+// documented in `oc-addon-entitlements-spec.md` - `snake_case` from the
 // engine, translated to `camelCase` on this typed error.
 export class OCAddonRequiredError extends ApiError {
   readonly addon: string;

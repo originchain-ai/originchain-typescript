@@ -64,7 +64,7 @@ const hits = await oc.vectorTopk("embeddings", {
   k: 5,
   dim: 3,
   metric: "cosine",
-  mode: "high_recall", // or "fast" — defaults to high_recall server-side
+  mode: "high_recall", // or "fast" - defaults to high_recall server-side
 });
 
 for (const h of hits) console.log(h.id, h.score);
@@ -150,7 +150,7 @@ const oc = new OriginChainClient({
 ## Performance: HTTP/2 in Node
 
 The engine speaks HTTP/2; browsers auto-negotiate it over ALPN. Node's
-built-in `fetch` (undici) defaults to HTTP/1.1 — bare SDK use works fine
+built-in `fetch` (undici) defaults to HTTP/1.1 - bare SDK use works fine
 on h1, but for a multiplexed connection inject an undici dispatcher with
 `allowH2: true` (this is **optional**):
 
@@ -178,4 +178,4 @@ npm run build     # tsup → dist/
 
 ## License
 
-Proprietary — © Silicoyn Technologies Pvt Ltd. See `LICENSE`.
+Proprietary - © Silicoyn Technologies Pvt Ltd. See `LICENSE`.
