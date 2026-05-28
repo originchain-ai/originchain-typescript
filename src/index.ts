@@ -1,8 +1,8 @@
 // Public surface of `@originchain/sdk`.
 //
 // Two clients:
-//   * `OriginChainClient`      — talks to a per-tenant engine (bearer auth)
-//   * `OriginChainAdminClient` — talks to the control plane (cookie + bearer)
+//   * `OriginChainClient`      - talks to a per-tenant engine (bearer auth)
+//   * `OriginChainAdminClient` - talks to the control plane (cookie + bearer)
 
 export {
   OriginChainClient,

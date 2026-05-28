@@ -2,7 +2,7 @@
 //
 // Names and casing mirror the engine's JSON exactly (snake_case for fields
 // that come back from the engine; camelCase only for SDK-local extensions).
-// Keep these in sync with `backend/crates/oc-http` types — when the engine
+// Keep these in sync with `backend/crates/oc-http` types - when the engine
 // adds a field, mirror it here in the same PR.
 
 // ── Auth / org / billing (control-plane) ──────────────────────────────────
@@ -76,7 +76,7 @@ export type EventView = {
 
 export type ProvisionResponse = {
   instance: Instance;
-  /** Shown once, never re-derivable — the store only keeps an argon2 hash. */
+  /** Shown once, never re-derivable - the store only keeps an argon2 hash. */
   bearer_token: string;
 };
 
@@ -188,7 +188,7 @@ export type LogsResponse = {
 
 /** One per-shape tile on `/app/metrics`. The backend may return `null`
  * for `p99_ms` / `qps` when the engine doesn't yet emit the underlying
- * counter — render "—" rather than fabricating a number. `enabled` is
+ * counter - render "-" rather than fabricating a number. `enabled` is
  * sourced from the real `tenant_addons` row. */
 export type ShapeStat = {
   p99_ms: number | null;
@@ -319,7 +319,7 @@ export type ClientOptions = {
   /** Per-request timeout in milliseconds. Default: 30000. */
   timeoutMs?: number;
   /** Override the tenant id parsed from `baseUrl`'s hostname. The SDK
-   * derives `tenant_id` from the first DNS label of `baseUrl` by default —
+   * derives `tenant_id` from the first DNS label of `baseUrl` by default -
    * pass this explicitly for non-standard hostnames or local dev. */
   tenantId?: string;
 };
