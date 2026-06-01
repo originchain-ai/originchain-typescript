@@ -657,8 +657,11 @@ class SubscriptionsMethods {
 
 class InstancesMethods {
   constructor(private readonly p: OriginChainAdminClient) {}
-  list() {
-    return this.p._request<Instance[]>("/v1/instances");
+  list(opts: { include_deleted?: boolean } = {}) {
+    const path = opts.include_deleted
+      ? "/v1/instances?include_deleted=true"
+      : "/v1/instances";
+    return this.p._request<Instance[]>(path);
   }
   get(id: string) {
     return this.p._request<Instance>(`/v1/instances/${id}`);
