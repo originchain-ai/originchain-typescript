@@ -49,8 +49,10 @@ export type Instance = {
   compute_plan_id: string;
   storage_plan_id: string;
   status:
+    | "pending_payment"
     | "provisioning"
     | "running"
+    | "suspending"
     | "suspended"
     | "deleting"
     | "deleted"
