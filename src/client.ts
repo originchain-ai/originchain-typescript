@@ -598,6 +598,25 @@ class AuthMethods {
       body: JSON.stringify(body),
     });
   }
+  /** Request a 6-digit OTP for OTP-based signin. Always returns sent=true
+   *  regardless of whether the email matches a registered account
+   *  (account-enumeration posture). The OTP is emailed via SES; the
+   *  customer pastes it back to /v1/auth/login/otp/verify. */
+  loginOtpRequest(body: { email: string }) {
+    return this.p._request<{ sent: boolean; expires_at: string }>(
+      "/v1/auth/login/otp/request",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  /** Verify a login OTP. On success returns AuthResponse + sets the
+   *  session cookie. Failure shape is always 401 regardless of which
+   *  check failed (wrong code / expired / no row). */
+  loginOtpVerify(body: { email: string; code: string }) {
+    return this.p._request<AuthResponse>("/v1/auth/login/otp/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
   signout() {
     return this.p._request<void>("/v1/auth/signout", { method: "POST" });
   }
