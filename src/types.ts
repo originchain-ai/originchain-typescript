@@ -283,6 +283,14 @@ export type VecTopkReq = {
 
 export type VecHit = { id: string; score: number };
 
+/** Which engine index family dispatches a vector delete. Mirrors the Rust
+ * `oc_vector::IndexKind` snake_case serde representation. */
+export type VecIndexKind = "hnsw" | "ivf" | "ivf_pq";
+
+/** Response body for a vector delete. `deleted` is `false` on an idempotent
+ * no-op (the id wasn't resident under `(tenant, table, id)`). */
+export type VecDeleteResp = { deleted: boolean };
+
 // ── Engine: Full-text ────────────────────────────────────────────────────
 
 export type FtsMode = "boolean" | "bm25" | "phrase";
