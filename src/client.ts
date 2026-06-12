@@ -52,7 +52,9 @@ import type {
   SqlSelect,
   Subscription,
   User,
+  VecDeleteResp,
   VecHit,
+  VecIndexKind,
   VecMetric,
   VecPutReq,
   VecTopkReq,
@@ -351,6 +353,25 @@ export class OriginChainClient {
       `/v1/tenants/${this.tenantId}/vector/${table}/topk`,
       { method: "POST", body: JSON.stringify(body) },
     );
+  }
+
+  /** Delete a single vector by id. Idempotent: `deleted` is `false` when the
+   * id wasn't resident (the server returns 200, not 404). `index` picks the
+   * engine family (default `"hnsw"`); `repair` opts into HNSW graph repair
+   * across the hole (ignored on IVF / IVF-PQ). */
+  vectorDelete(
+    table: string,
+    id: string,
+    opts: { index?: VecIndexKind; repair?: boolean } = {},
+  ): Promise<VecDeleteResp> {
+    const qs = new URLSearchParams();
+    if (opts.index !== undefined) qs.set("index", opts.index);
+    if (opts.repair !== undefined) qs.set("repair", String(opts.repair));
+    const query = qs.toString();
+    const path =
+      `/v1/tenants/${this.tenantId}/vector/${table}/${encodeURIComponent(id)}` +
+      (query ? `?${query}` : "");
+    return this._request<VecDeleteResp>(path, { method: "DELETE" });
   }
 
   // ── Full-text ──────────────────────────────────────────────────────────

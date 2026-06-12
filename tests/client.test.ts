@@ -137,6 +137,33 @@ describe("OriginChainClient", () => {
     );
   });
 
+  it("vectorDelete issues a DELETE with index + repair query params", async () => {
+    const { fetch, calls } = mockFetch(200, { deleted: true });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.vectorDelete("embeddings", "doc-1", {
+      index: "ivf",
+      repair: false,
+    });
+
+    expect(resp.deleted).toBe(true);
+    expect(calls[0]!.init.method).toBe("DELETE");
+    const url = new URL(calls[0]!.url);
+    expect(url.pathname).toBe("/v1/tenants/tnt-test/vector/embeddings/doc-1");
+    expect(url.searchParams.get("index")).toBe("ivf");
+    expect(url.searchParams.get("repair")).toBe("false");
+  });
+
+  it("vectorDelete omits the query string when no opts are given", async () => {
+    const { fetch, calls } = mockFetch(200, { deleted: false });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.vectorDelete("embeddings", "missing-id");
+
+    expect(resp.deleted).toBe(false);
+    expect(calls[0]!.url).toBe(
+      `${BASE}/v1/tenants/tnt-test/vector/embeddings/missing-id`,
+    );
+  });
+
   it("ftsSearch builds a query string with mode + k", async () => {
     const { fetch, calls } = mockFetch(200, [
       { doc_id: "d1", score: 1.4 },
