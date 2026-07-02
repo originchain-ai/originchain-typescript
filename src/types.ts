@@ -59,6 +59,14 @@ export type Instance = {
     | "failed";
   endpoint: string | null;
   created_at: string;
+  /** Observed engine health for a running instance: "ok" | "unreachable".
+   * Absent on non-running rows / older control planes. */
+  health?: string;
+  /** Number of nodes (shards) backing the instance; >1 = a sharded multi-node
+   * cluster. Absent on control planes that predate node_count exposure. */
+  node_count?: number;
+  /** Resilience / HA mode. "ha" gives each shard a cross-AZ standby replica. */
+  resilience?: "single" | "ha" | "multi" | string;
 };
 
 export type EventView = {
