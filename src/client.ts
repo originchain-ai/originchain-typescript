@@ -46,6 +46,7 @@ import type {
   NetworkRequestKind,
   PaymentMethodView,
   PendingPaymentResponse,
+  PgwireStatus,
   PitrArchiveResponse,
   WhoamiIp,
   Plan,
@@ -756,6 +757,23 @@ class InstancesMethods {
       { method: "DELETE" },
     );
   }
+  /** Postgres wire (pgwire) access status + connection credential. */
+  getPgwire(id: string) {
+    return this.p._request<PgwireStatus>(`/v1/instances/${id}/pgwire`);
+  }
+  /** Enable Postgres access: mints a credential, restarts the engine with the
+   * listener on, returns the live connection details. Single-node only. */
+  enablePgwire(id: string) {
+    return this.p._request<PgwireStatus>(`/v1/instances/${id}/pgwire`, {
+      method: "POST",
+    });
+  }
+  /** Disable Postgres access (removes the listener + clears the credential). */
+  disablePgwire(id: string) {
+    return this.p._request<PgwireStatus>(`/v1/instances/${id}/pgwire`, {
+      method: "DELETE",
+    });
+  }
   snapshots(id: string) {
     return this.p._request<SnapshotView[]>(`/v1/instances/${id}/snapshots`);
   }
@@ -933,6 +951,7 @@ export type {
   NetworkRequest,
   NetworkRequestKind,
   PaymentMethodView,
+  PgwireStatus,
   PitrArchiveResponse,
   Plan,
   PlansResponse,
