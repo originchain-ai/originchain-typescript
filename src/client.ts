@@ -21,6 +21,8 @@ import type {
   AddonEnableResponse,
   AddonRow,
   AdminClientOptions,
+  Allowlist,
+  AllowlistEntry,
   AskResponse,
   AuthResponse,
   ClientOptions,
@@ -40,9 +42,12 @@ import type {
   LogsResponse,
   MetricsResponse,
   MetricsSummaryResponse,
+  NetworkRequest,
+  NetworkRequestKind,
   PaymentMethodView,
   PendingPaymentResponse,
   PitrArchiveResponse,
+  WhoamiIp,
   Plan,
   PlansResponse,
   ProvisionResponse,
@@ -711,6 +716,46 @@ class InstancesMethods {
   nodes(id: string) {
     return this.p._request<InstanceNode[]>(`/v1/instances/${id}/nodes`);
   }
+  /** The instance's IP Access List. Empty `entries` = open to all. */
+  getAllowlist(id: string) {
+    return this.p._request<Allowlist>(`/v1/instances/${id}/allowlist`);
+  }
+  /** Replace the IP Access List. Each entry is a bare IP (→ /32) or a CIDR,
+   * with an optional description. Applies to the live instance immediately
+   * (443 + 5432). An empty list re-opens the instance to 0.0.0.0/0. */
+  setAllowlist(id: string, entries: AllowlistEntry[]) {
+    return this.p._request<Allowlist>(`/v1/instances/${id}/allowlist`, {
+      method: "PUT",
+      body: JSON.stringify({ entries }),
+    });
+  }
+  /** The caller's public IP as seen by the control plane (for "Add my IP"). */
+  myIp() {
+    return this.p._request<WhoamiIp>(`/v1/whoami/ip`);
+  }
+  /** Advanced Network Access requests (VPC peering / private endpoint). */
+  networkRequests(id: string) {
+    return this.p._request<NetworkRequest[]>(
+      `/v1/instances/${id}/network-requests`,
+    );
+  }
+  /** File a peering / private-endpoint request. Persisted + ops-notified. */
+  createNetworkRequest(
+    id: string,
+    body: { kind: NetworkRequestKind; details: Record<string, unknown> },
+  ) {
+    return this.p._request<NetworkRequest>(
+      `/v1/instances/${id}/network-requests`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  /** Withdraw a previously-filed network request. */
+  deleteNetworkRequest(id: string, req: string) {
+    return this.p._request<void>(
+      `/v1/instances/${id}/network-requests/${req}`,
+      { method: "DELETE" },
+    );
+  }
   snapshots(id: string) {
     return this.p._request<SnapshotView[]>(`/v1/instances/${id}/snapshots`);
   }
@@ -871,6 +916,8 @@ class EventsMethods {
 export type {
   AddonEnableResponse,
   AddonRow,
+  Allowlist,
+  AllowlistEntry,
   AskResponse,
   AuthResponse,
   ClientOptions,
@@ -883,6 +930,8 @@ export type {
   LogsResponse,
   MetricsResponse,
   MetricsSummaryResponse,
+  NetworkRequest,
+  NetworkRequestKind,
   PaymentMethodView,
   PitrArchiveResponse,
   Plan,
@@ -892,4 +941,5 @@ export type {
   SnapshotView,
   Subscription,
   User,
+  WhoamiIp,
 };
