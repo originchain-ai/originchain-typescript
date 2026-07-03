@@ -69,6 +69,22 @@ export type Instance = {
   resilience?: "single" | "ha" | "multi" | string;
 };
 
+/** One EC2 node (shard writer or standby) backing an instance.
+ * From GET /v1/instances/:id/nodes. */
+export type InstanceNode = {
+  instance_id: string;
+  /** Shard index this node serves (0-based). */
+  shard: number;
+  /** "writer" (owns the shard) or "standby" (its cross-AZ HA replica). */
+  role: "writer" | "standby" | string;
+  private_ip: string | null;
+  public_ip: string | null;
+  az: string | null;
+  /** EC2 lifecycle state ("running", "stopped", …). */
+  state: string;
+  name: string;
+};
+
 export type EventView = {
   id: string;
   // Stable kind enum from operation-backend (`events::Kind::as_str`).
