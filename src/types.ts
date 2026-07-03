@@ -103,6 +103,20 @@ export type Allowlist = {
  * GET /v1/whoami/ip — powers the console's "Add my current IP" button. */
 export type WhoamiIp = { ip: string };
 
+/** Postgres wire-protocol (pgwire) access for an instance. When `enabled`,
+ * `host`/`port`/`user`/`database`/`password` form a working `postgresql://`
+ * connection string usable by any Postgres driver. From
+ * GET/POST/DELETE /v1/instances/:id/pgwire. */
+export type PgwireStatus = {
+  enabled: boolean;
+  host: string | null;
+  port: number;
+  user: string;
+  database: string;
+  /** Present only when enabled. */
+  password?: string;
+};
+
 export type NetworkRequestKind = "peering" | "private_endpoint";
 
 /** A VPC-peering or private-endpoint (PrivateLink) connectivity request.
