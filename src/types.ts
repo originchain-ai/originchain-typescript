@@ -85,6 +85,38 @@ export type InstanceNode = {
   name: string;
 };
 
+/** One IP Access List entry: a CIDR (or bare IP, normalised to /32 or /128 on
+ * write) plus an optional label. From GET /v1/instances/:id/allowlist. */
+export type AllowlistEntry = {
+  cidr: string;
+  description: string;
+};
+
+/** An instance's IP Access List. Empty `entries` = open to the internet
+ * (0.0.0.0/0). Gates the engine endpoint (443) and pgwire (5432); cross-shard
+ * node-to-node traffic is unaffected. */
+export type Allowlist = {
+  entries: AllowlistEntry[];
+};
+
+/** The caller's public source IP as seen by the control plane. From
+ * GET /v1/whoami/ip — powers the console's "Add my current IP" button. */
+export type WhoamiIp = { ip: string };
+
+export type NetworkRequestKind = "peering" | "private_endpoint";
+
+/** A VPC-peering or private-endpoint (PrivateLink) connectivity request.
+ * From GET/POST /v1/instances/:id/network-requests. `details` is the per-kind
+ * payload (peering: aws_account_id/vpc_id/vpc_cidr/region; private_endpoint:
+ * aws_account_id/region). */
+export type NetworkRequest = {
+  id: string;
+  kind: NetworkRequestKind | string;
+  details: Record<string, unknown>;
+  status: "requested" | "in_progress" | "active" | "rejected" | "deleted" | string;
+  created_at: string;
+};
+
 export type EventView = {
   id: string;
   // Stable kind enum from operation-backend (`events::Kind::as_str`).
