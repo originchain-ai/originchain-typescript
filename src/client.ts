@@ -69,12 +69,36 @@ import type {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Crockford base32 alphabet (ULID), lowercased to match engine tenant ids. */
+const ULID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
+/** Re-encode a UUID's 128 bits as a 26-char lowercase ULID — the engine's
+ * tenant-id format. Free-tier endpoints (`<uuid>.free.originchain.ai`)
+ * carry the raw instance UUID in the subdomain, but every engine
+ * `/v1/tenants/:tenant/...` path wants the ULID re-encoding of those same
+ * bytes; sending the UUID gets a 400 "invalid tenant id: invalid length". */
+function uuidToUlid(uuid: string): string {
+  let n = BigInt("0x" + uuid.replace(/-/g, ""));
+  let out = "";
+  for (let i = 0; i < 26; i++) {
+    out = ULID_ALPHABET[Number(n & 31n)] + out;
+    n >>= 5n;
+  }
+  return out;
+}
+
 /** Parse the tenant id from a hostname like
- * `tnt-01h….ap-south-1.db.originchain.ai` → `tnt-01h…`. Returns the empty
- * string when the URL is unparseable so callers get a clean error path. */
+ * `tnt-01h….ap-south-1.db.originchain.ai` → `tnt-01h…`. Free-tier
+ * hostnames carry the instance UUID; it is re-encoded to the engine's
+ * ULID form. Returns the empty string when the URL is unparseable so
+ * callers get a clean error path. */
 export function tenantIdFromEndpoint(endpoint: string): string {
   try {
-    return new URL(endpoint).hostname.split(".")[0] ?? "";
+    const label = new URL(endpoint).hostname.split(".")[0] ?? "";
+    return UUID_RE.test(label) ? uuidToUlid(label) : label;
   } catch {
     return "";
   }
