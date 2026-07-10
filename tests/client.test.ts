@@ -71,6 +71,41 @@ describe("OriginChainClient", () => {
     });
   });
 
+  it("usage() GETs /usage and exposes the neutral configuration (no weather codename)", async () => {
+    const { fetch, calls } = mockFetch(200, {
+      tenant: "tnt-test",
+      tier: "standard",
+      configuration: {
+        slug: "standard",
+        label: "4 vCPU / 16 GB, HA",
+        vcpu: 4,
+        ram_gb: 16,
+        storage_gb: 100,
+        ha: true,
+        monthly_price: 699,
+      },
+      used: { store_keys: 42 },
+      schemas: [],
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const u = await oc.usage();
+
+    // Neutral slug, never the weather codename.
+    expect(u.tier).toBe("standard");
+    expect(u.configuration?.slug).toBe("standard");
+    expect(u.configuration?.vcpu).toBe(4);
+    expect(u.configuration?.monthly_price).toBe(699);
+    expect(JSON.stringify(u).toLowerCase()).not.toContain("storm");
+
+    expect(calls).toHaveLength(1);
+    const [c] = calls;
+    expect(c!.url).toBe(`${BASE}/v1/tenants/tnt-test/usage`);
+    // Read-only: a plain GET, no Idempotency-Key.
+    const headers = c!.init.headers as Record<string, string>;
+    expect(c!.init.method ?? "GET").toBe("GET");
+    expect(headers["idempotency-key"]).toBeUndefined();
+  });
+
   it("auto-generates Idempotency-Key on every mutating call", async () => {
     const { fetch, calls } = mockFetch(200, { kind: "select", rows: [] });
     const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
