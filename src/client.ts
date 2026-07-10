@@ -53,11 +53,14 @@ import type {
   PlansResponse,
   ProvisionResponse,
   RankedHit,
+  SchemaUsage,
   SetupIntent,
   SnapshotView,
   SqlResp,
   SqlSelect,
   Subscription,
+  TenantConfiguration,
+  TenantUsage,
   User,
   VecDeleteResp,
   VecHit,
@@ -295,6 +298,21 @@ export class OriginChainClient {
         headers: { "content-type": "text/plain" },
         rawBody: true,
       },
+    );
+  }
+
+  // ── Usage ──────────────────────────────────────────────────────────────
+
+  /** Live usage counters + the tenant's compute configuration.
+   *
+   * The response `tier` is the neutral configuration slug
+   * (`entry`/`standard`/`advanced`/`custom`); the internal weather
+   * codename is never exposed. Prefer the richer `configuration` object
+   * for the full spec + list price. Both are absent in legacy
+   * per-addon mode. */
+  usage(): Promise<TenantUsage> {
+    return this._request<TenantUsage>(
+      `/v1/tenants/${this.tenantId}/usage`,
     );
   }
 
@@ -983,6 +1001,9 @@ export type {
   SetupIntent,
   SnapshotView,
   Subscription,
+  TenantConfiguration,
+  TenantUsage,
+  SchemaUsage,
   User,
   WhoamiIp,
 };
