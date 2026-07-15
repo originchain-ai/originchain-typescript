@@ -320,6 +320,52 @@ export type CurrentUsageResponse = {
   total_usd: number;
 };
 
+/** Neutral, spec-based compute configuration returned by the engine's
+ * `GET /v1/tenants/:t/usage`.
+ *
+ * `slug` is the stable machine id (`entry`/`standard`/`advanced`/
+ * `custom`); `label` is display text such as "4 vCPU / 16 GB, HA".
+ * Quantitative fields and `monthly_price` are omitted for the
+ * sales-sized `custom` configuration. */
+export type TenantConfiguration = {
+  slug: string;
+  label: string;
+  vcpu?: number;
+  ram_gb?: number;
+  storage_gb?: number;
+  ha: boolean;
+  monthly_price?: number;
+};
+
+/** Per-schema row / byte / segment breakdown from `/usage`. */
+export type SchemaUsage = {
+  schema: string;
+  rows: number;
+  bytes: number;
+  segments: number;
+};
+
+/** Response of the engine's `GET /v1/tenants/:t/usage`.
+ *
+ * `tier` is the configuration slug
+ * (`entry`/`standard`/`advanced`/`custom`). Prefer the richer
+ * `configuration` object. `tier`, `configuration`, and `limits` are all
+ * absent in legacy per-addon mode. */
+export type TenantUsage = {
+  tenant: string;
+  /** Configuration slug — same value as `configuration.slug`. */
+  tier?: string;
+  configuration?: TenantConfiguration;
+  limits?: Record<string, number>;
+  used: {
+    store_keys: number;
+    ask_in_flight?: number;
+    vector_embeddings?: number;
+    reactive_subscriptions?: number;
+  };
+  schemas: SchemaUsage[];
+};
+
 // ── Engine: SQL ──────────────────────────────────────────────────────────
 
 export type SqlReq = { sql: string; params?: unknown[] };

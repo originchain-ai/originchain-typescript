@@ -3,6 +3,21 @@
 All notable changes to `@originchain/sdk`. See the repo-root `CHANGELOG.md`
 for engine releases.
 
+## [0.4.0] - 2026-07-11
+
+### Added
+- `OriginChainClient.usage()` - reads `GET /v1/tenants/:t/usage`: live
+  counters, per-schema breakdown, and the tenant's compute
+  `configuration` (`slug`, `label`, `vcpu`, `ram_gb`, `storage_gb`,
+  `ha`, `monthly_price`).
+- `TenantUsage`, `TenantConfiguration`, `SchemaUsage` types.
+
+### Changed
+- The `/usage` `tier` field is the neutral configuration slug
+  (`entry` / `standard` / `advanced` / `custom`) — the SDK never exposes
+  the internal compute codename. Prefer `configuration` for the full
+  spec.
+
 ## [0.3.0] - 2026-05-02
 
 Initial extracted release. Surface mirrors the Python SDK at the same
