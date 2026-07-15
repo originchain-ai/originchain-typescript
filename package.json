@@ -7,11 +7,10 @@
   "homepage": "https://originchain.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/silicoyn/originchain.git",
-    "directory": "sdk/typescript"
+    "url": "git+https://github.com/originchain-ai/originchain-typescript.git"
   },
   "bugs": {
-    "url": "https://github.com/silicoyn/originchain/issues"
+    "url": "https://github.com/originchain-ai/originchain-typescript/issues"
   },
   "keywords": [
     "originchain",
