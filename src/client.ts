@@ -655,6 +655,9 @@ export class OriginChainAdminClient {
 
 class AuthMethods {
   constructor(private readonly p: OriginChainAdminClient) {}
+  /** @deprecated `POST /v1/auth/signup` now returns `410 Gone` — signup is
+   *  OTP-verified. Use {@link signupOtpRequest} + {@link signupOtpVerify}
+   *  instead. */
   signup(body: { email: string; password: string; org_name: string }) {
     return this.p._request<AuthResponse>("/v1/auth/signup", {
       method: "POST",
@@ -682,6 +685,23 @@ class AuthMethods {
    *  check failed (wrong code / expired / no row). */
   loginOtpVerify(body: { email: string; code: string }) {
     return this.p._request<AuthResponse>("/v1/auth/login/otp/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+  /** Start an OTP-verified signup. A 6-digit OTP is emailed to `email`;
+   *  the customer pastes it back to {@link signupOtpVerify}. Replaces the
+   *  deprecated one-shot {@link signup}. */
+  signupOtpRequest(body: { email: string; password: string; org_name: string }) {
+    return this.p._request<{ sent: boolean; expires_at: string }>(
+      "/v1/auth/signup/request",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  /** Verify a signup OTP. On success creates the account + org, returns
+   *  AuthResponse, and sets the session cookie. */
+  signupOtpVerify(body: { email: string; code: string }) {
+    return this.p._request<AuthResponse>("/v1/auth/signup/verify", {
       method: "POST",
       body: JSON.stringify(body),
     });
