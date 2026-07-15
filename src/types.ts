@@ -323,8 +323,6 @@ export type CurrentUsageResponse = {
 /** Neutral, spec-based compute configuration returned by the engine's
  * `GET /v1/tenants/:t/usage`.
  *
- * This REPLACES the internal weather codename (thunder/storm/cyclone/…)
- * the engine used to surface — the SDK never exposes that codename.
  * `slug` is the stable machine id (`entry`/`standard`/`advanced`/
  * `custom`); `label` is display text such as "4 vCPU / 16 GB, HA".
  * Quantitative fields and `monthly_price` are omitted for the
@@ -349,14 +347,13 @@ export type SchemaUsage = {
 
 /** Response of the engine's `GET /v1/tenants/:t/usage`.
  *
- * `tier` is the neutral configuration slug
- * (`entry`/`standard`/`advanced`/`custom`) — NOT the internal weather
- * codename, which the SDK never exposes. Prefer the richer
+ * `tier` is the configuration slug
+ * (`entry`/`standard`/`advanced`/`custom`). Prefer the richer
  * `configuration` object. `tier`, `configuration`, and `limits` are all
  * absent in legacy per-addon mode. */
 export type TenantUsage = {
   tenant: string;
-  /** Neutral configuration slug; never the weather codename. */
+  /** Configuration slug — same value as `configuration.slug`. */
   tier?: string;
   configuration?: TenantConfiguration;
   limits?: Record<string, number>;
