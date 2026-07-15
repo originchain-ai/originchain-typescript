@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   OCAddonRequiredError,
+  OriginChainAdminClient,
   OriginChainClient,
   type FetchLike,
 } from "../src/index.js";
@@ -300,5 +301,50 @@ describe("OriginChainClient", () => {
       // Add-on error must be a strict subset of ApiError.
       expect(e instanceof OCAddonRequiredError).toBe(false);
     }
+  });
+});
+
+describe("OriginChainAdminClient auth", () => {
+  const ADMIN = "https://api.originchain.ai";
+
+  it("signupOtpRequest POSTs email/password/org_name to /signup/request", async () => {
+    const { fetch, calls } = mockFetch(200, {
+      sent: true,
+      expires_at: "2026-07-15T00:10:00Z",
+    });
+    const admin = new OriginChainAdminClient({ baseUrl: ADMIN, fetch });
+    const r = await admin.auth.signupOtpRequest({
+      email: "a@b.c",
+      password: "pw",
+      org_name: "Acme",
+    });
+
+    expect(r.sent).toBe(true);
+    expect(calls).toHaveLength(1);
+    const [c] = calls;
+    expect(c!.url).toBe(`${ADMIN}/v1/auth/signup/request`);
+    expect(c!.init.method).toBe("POST");
+    expect(JSON.parse(c!.init.body as string)).toEqual({
+      email: "a@b.c",
+      password: "pw",
+      org_name: "Acme",
+    });
+  });
+
+  it("signupOtpVerify POSTs email/code to /signup/verify", async () => {
+    const { fetch, calls } = mockFetch(200, {
+      user: { id: "u1", email: "a@b.c" },
+    });
+    const admin = new OriginChainAdminClient({ baseUrl: ADMIN, fetch });
+    await admin.auth.signupOtpVerify({ email: "a@b.c", code: "123456" });
+
+    expect(calls).toHaveLength(1);
+    const [c] = calls;
+    expect(c!.url).toBe(`${ADMIN}/v1/auth/signup/verify`);
+    expect(c!.init.method).toBe("POST");
+    expect(JSON.parse(c!.init.body as string)).toEqual({
+      email: "a@b.c",
+      code: "123456",
+    });
   });
 });
