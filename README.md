@@ -35,6 +35,18 @@ if (resp.kind === "select") {
 }
 ```
 
+Every SQL `SELECT` must reference a table — the engine rejects bare
+expressions like `SELECT 1`.
+
+### Options
+
+| Option      | Required | Notes                                                              |
+| ----------- | -------- | ------------------------------------------------------------------ |
+| `baseUrl`   | yes      | Your per-tenant engine endpoint.                                   |
+| `bearer`    | yes      | `Authorization: Bearer …` token.                                   |
+| `tenantId`  | no       | Auto-derived from `baseUrl`'s hostname; set it only when the host doesn't carry the tenant id (e.g. behind a custom gateway). |
+| `timeoutMs` | no       | Per-request timeout (default 30000).                               |
+
 ## Two clients
 
 The package exposes two classes because the engine and the control plane
@@ -159,7 +171,7 @@ import { Agent, fetch as undiciFetch } from "undici";
 
 const dispatcher = new Agent({ allowH2: true });
 const client = new OriginChainClient({
-  bearer, tenant, baseUrl,
+  bearer, tenantId, baseUrl,
   fetch: (url, init) => undiciFetch(url, { ...init, dispatcher }),
 });
 ```
