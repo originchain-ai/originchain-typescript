@@ -190,4 +190,4 @@ npm run build     # tsup → dist/
 
 ## License
 
-Proprietary - © Silicoyn Technologies Pvt Ltd. See `LICENSE`.
+MIT License - © 2026 Silicoyn Technologies Pvt Ltd. See `LICENSE`.
