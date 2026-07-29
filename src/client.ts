@@ -53,6 +53,7 @@ import type {
   PlansResponse,
   ProvisionResponse,
   RankedHit,
+  SchemaRegisterResponse,
   SchemaUsage,
   SetupIntent,
   SnapshotView,
@@ -289,8 +290,8 @@ export class OriginChainClient {
     );
   }
 
-  registerSchema(toml: string): Promise<{ id: string; tenant: string }> {
-    return this._request<{ id: string; tenant: string }>(
+  registerSchema(toml: string): Promise<SchemaRegisterResponse> {
+    return this._request<SchemaRegisterResponse>(
       `/v1/tenants/${this.tenantId}/schemas`,
       {
         method: "POST",
@@ -317,9 +318,17 @@ export class OriginChainClient {
 
   // ── SQL ────────────────────────────────────────────────────────────────
 
-  /** Execute a SQL statement. Returns a discriminated union on `kind`:
-   * `"select"` (rows), `"insert"` (server-translated typed row payload),
-   * or `"delete"` (server-translated typed PK). */
+  /** Execute a SQL statement.
+   *
+   * Returns a {@link SqlResp} — a discriminated union on `kind` covering
+   * every shape the engine answers with: `"select"`, `"insert"`, `"update"`,
+   * `"delete"`, `"explain"` (`EXPLAIN` / `EXPLAIN ANALYZE`), `"tx"`
+   * (`BEGIN`/`COMMIT`/`ROLLBACK`), `"buffered"`, and the DDL results
+   * (`"createtable"`, `"altertable"`, `"createindex"`, `"createview"`, …).
+   * Narrow with `switch (resp.kind)` before reading variant fields.
+   *
+   * `params` binds `$1`, `$2`, … placeholders in `query` positionally
+   * (`params[0]` ⇒ `$1`); the engine substitutes them at the AST level. */
   sql(query: string, params?: unknown[]): Promise<SqlResp> {
     const body: { sql: string; params?: unknown[] } = { sql: query };
     if (params !== undefined) body.params = params;
@@ -485,6 +494,14 @@ export class OriginChainClient {
 
 // ── Graph methods (sub-namespace) ────────────────────────────────────────
 
+/** Build the `weights` key {@link GraphMethods.dijkstra} expects for the edge
+ * `from → to`. The engine keys its weight lookup on `` `${from}|${to}` `` and
+ * skips edges it can't find, so getting this wrong reports every destination
+ * as unreachable instead of erroring. */
+export function edgeWeightKey(from: string, to: string): string {
+  return `${from}|${to}`;
+}
+
 export class GraphMethods {
   private readonly p: OriginChainClient;
   constructor(parent: OriginChainClient) {
@@ -511,6 +528,9 @@ export class GraphMethods {
     );
   }
 
+  /** Breadth-first traversal from `pk` along `rel`. `max_depth` defaults to
+   * **3** server-side when omitted — it is a default, not an unlimited scan
+   * with a safety clamp. */
   bfs(
     schema: string,
     opts: { rel: string; pk: string; max_depth?: number },
@@ -524,6 +544,9 @@ export class GraphMethods {
     );
   }
 
+  /** Reachability from `src` to `dst` along `rel`. `max_depth` defaults to
+   * **3** server-side when omitted. The response carries only `reachable` —
+   * the engine does not materialise the path itself. */
   path(
     schema: string,
     opts: { rel: string; src: string; dst: string; max_depth?: number },
@@ -541,9 +564,19 @@ export class GraphMethods {
     );
   }
 
-  /** Dijkstra over a typed relation. The `weights` map is JSON-stringified
-   * into the `weights_json` query parameter (NOT a request body) - backend
-   * reads `q.weights_json`. */
+  /** Dijkstra over a typed relation.
+   *
+   * `weights` is a PER-EDGE map keyed `` `${from_pk}|${to_pk}` `` — NOT a map
+   * of relation/column names. The engine looks each traversed edge up by that
+   * exact key and **skips any edge the map does not cover**, so a weights map
+   * keyed by anything else silently yields `{ cost: null }` ("unreachable")
+   * rather than an error. Build keys with {@link edgeWeightKey}.
+   *
+   * The map is JSON-stringified into the `weights_json` query parameter (NOT
+   * a request body) — the endpoint is GET-shaped so traversals stay cacheable.
+   *
+   * `cost` is `null` when `dst` is unreachable from `src` under the supplied
+   * weight function; the key is always present. */
   dijkstra(
     schema: string,
     opts: {
@@ -870,7 +903,7 @@ class InstancesMethods {
     return this.p._request<string>(`/v1/instances/${id}/schemas/${schema}`);
   }
   registerSchema(id: string, toml: string) {
-    return this.p._request<{ id: string; tenant: string }>(
+    return this.p._request<SchemaRegisterResponse>(
       `/v1/instances/${id}/schemas`,
       {
         method: "POST",
@@ -1022,6 +1055,7 @@ export type {
   Subscription,
   TenantConfiguration,
   TenantUsage,
+  SchemaRegisterResponse,
   SchemaUsage,
   User,
   WhoamiIp,

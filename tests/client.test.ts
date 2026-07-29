@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  edgeWeightKey,
   OCAddonRequiredError,
   OriginChainAdminClient,
   OriginChainClient,
@@ -70,6 +71,194 @@ describe("OriginChainClient", () => {
     expect(JSON.parse(c!.init.body as string)).toEqual({
       sql: "SELECT id, email FROM shop.customers LIMIT 1",
     });
+  });
+
+  // ── /sql wire contract ────────────────────────────────────────────────
+  //
+  // The engine's `SqlResp` is `#[serde(tag = "kind", rename_all =
+  // "lowercase")]`, so these bodies are byte-for-byte what the engine emits.
+  // They pin the shapes the union used to get wrong.
+
+  it("decodes an EXPLAIN response (kind=explain) without losing the plan", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "explain",
+      plan: "Limit(10)\n  Filter(id = 1)\n    Scan(shop.customers)",
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("EXPLAIN SELECT * FROM shop.customers");
+
+    expect(resp.kind).toBe("explain");
+    if (resp.kind !== "explain") throw new Error("expected explain");
+    expect(resp.plan).toContain("Scan(shop.customers)");
+    // Plain EXPLAIN omits `stats` entirely; only EXPLAIN ANALYZE sets it.
+    expect(resp.stats).toBeUndefined();
+  });
+
+  it("decodes an EXPLAIN ANALYZE response with per-operator stats", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "explain",
+      plan: "Scan(shop.customers) (actual rows=3)",
+      stats: { rows: 3, ms: 1.2 },
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("EXPLAIN ANALYZE SELECT * FROM shop.customers");
+
+    if (resp.kind !== "explain") throw new Error("expected explain");
+    expect(resp.stats).toEqual({ rows: 3, ms: 1.2 });
+  });
+
+  it("decodes a scan-predicate DELETE, where the engine omits `pk`", async () => {
+    // A `DELETE … WHERE <non-pk predicate>` has no single row key, so the
+    // engine omits `pk` (skip_serializing_if). Modelling it as required made
+    // callers read `undefined` through a `string`-typed field.
+    const { fetch } = mockFetch(200, {
+      kind: "delete",
+      schema: "shop.customers",
+      rows_affected: 7,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("DELETE FROM shop.customers WHERE active = false");
+
+    if (resp.kind !== "delete") throw new Error("expected delete");
+    expect(resp.pk).toBeUndefined();
+    expect(resp.rows_affected).toBe(7);
+    expect(resp.rows_buffered).toBeUndefined();
+  });
+
+  it("decodes a pk-fastpath DELETE, where the engine sets `pk`", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "delete",
+      schema: "shop.customers",
+      pk: "c-1",
+      rows_affected: 1,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("DELETE FROM shop.customers WHERE id = 'c-1'");
+
+    if (resp.kind !== "delete") throw new Error("expected delete");
+    expect(resp.pk).toBe("c-1");
+  });
+
+  it("decodes INSERT … RETURNING with the always-present `inserted` count", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "insert",
+      schema: "shop.customers",
+      inserted: 2,
+      returning: ["id", "email"],
+      rows: [
+        { id: "c-1", email: "a@b.c" },
+        { id: "c-2", email: "d@e.f" },
+      ],
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql(
+      "INSERT INTO shop.customers (email) VALUES ('a@b.c'), ('d@e.f') RETURNING id, email",
+    );
+
+    if (resp.kind !== "insert") throw new Error("expected insert");
+    expect(resp.inserted).toBe(2);
+    expect(resp.returning).toEqual(["id", "email"]);
+    expect(resp.rows).toHaveLength(2);
+  });
+
+  it("decodes a plain INSERT, where the engine omits `returning` and `rows`", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "insert",
+      schema: "shop.customers",
+      inserted: 1,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("INSERT INTO shop.customers (email) VALUES ('a@b.c')");
+
+    if (resp.kind !== "insert") throw new Error("expected insert");
+    expect(resp.inserted).toBe(1);
+    expect(resp.rows).toBeUndefined();
+    expect(resp.returning).toBeUndefined();
+  });
+
+  it("decodes an UPDATE result", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "update",
+      schema: "shop.customers",
+      rows_affected: 3,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("UPDATE shop.customers SET active = true");
+
+    if (resp.kind !== "update") throw new Error("expected update");
+    expect(resp.rows_affected).toBe(3);
+  });
+
+  it("decodes a transaction-control result", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "tx",
+      op: "commit",
+      ops_committed: 4,
+      session_id: "sess-1",
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("COMMIT");
+
+    if (resp.kind !== "tx") throw new Error("expected tx");
+    expect(resp.op).toBe("commit");
+    expect(resp.ops_committed).toBe(4);
+    expect(resp.session_id).toBe("sess-1");
+  });
+
+  it("decodes DDL results, whose `kind` tags are lowercased with no separator", async () => {
+    // serde's `rename_all = "lowercase"` does NOT insert an underscore:
+    // `CreateTable` serialises as "createtable", not "create_table".
+    const { fetch } = mockFetch(200, {
+      kind: "createindex",
+      schema: "shop.customers",
+      index: "idx_email",
+      rows_indexed: 120,
+      created: true,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("CREATE INDEX idx_email ON shop.customers (email)");
+
+    if (resp.kind !== "createindex") throw new Error("expected createindex");
+    expect(resp.index).toBe("idx_email");
+    expect(resp.rows_indexed).toBe(120);
+    expect(resp.created).toBe(true);
+  });
+
+  it("exposes SELECT projection order via `columns` when the plan declares one", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "select",
+      rows: [{ email: "a@b.c", id: 1 }],
+      columns: ["id", "email"],
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const resp = await oc.sql("SELECT id, email FROM shop.customers");
+
+    if (resp.kind !== "select") throw new Error("expected select");
+    // JSON object key order is NOT projection order - `columns` is.
+    expect(resp.columns).toEqual(["id", "email"]);
+  });
+
+  it("sql() threads positional bind params into the request body", async () => {
+    const { fetch, calls } = mockFetch(200, { kind: "select", rows: [] });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    await oc.sql("SELECT * FROM shop.customers WHERE id = $1", ["c-1"]);
+
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
+      sql: "SELECT * FROM shop.customers WHERE id = $1",
+      params: ["c-1"],
+    });
+  });
+
+  it("sqlOne() rejects a non-SELECT kind", async () => {
+    const { fetch } = mockFetch(200, {
+      kind: "insert",
+      schema: "shop.customers",
+      inserted: 1,
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    await expect(
+      oc.sqlOne("INSERT INTO shop.customers (email) VALUES ('a@b.c')"),
+    ).rejects.toMatchObject({ status: 400, code: "validation_failed" });
   });
 
   it("usage() GETs /usage and exposes the neutral configuration (no weather codename)", async () => {
@@ -222,14 +411,21 @@ describe("OriginChainClient", () => {
     expect(url.searchParams.get("k")).toBe("5");
   });
 
-  it("graph.dijkstra serialises weights into weights_json (NOT a body)", async () => {
+  it("graph.dijkstra serialises PER-EDGE weights into weights_json (NOT a body)", async () => {
+    // The engine looks each traversed edge up by the literal key
+    // `${from_pk}|${to_pk}` and SKIPS any edge the map doesn't cover, so a
+    // map keyed by relation/column names silently reports every destination
+    // as unreachable. Keep this test keyed by edge - it is the contract.
     const { fetch, calls } = mockFetch(200, { cost: 4.25 });
     const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
     const r = await oc.graph.dijkstra("network", {
       rel: "edge",
       src: "n1",
       dst: "n5",
-      weights: { cost: 1, latency: 0.5 },
+      weights: {
+        [edgeWeightKey("n1", "n3")]: 1,
+        [edgeWeightKey("n3", "n5")]: 3.25,
+      },
     });
 
     expect(r.cost).toBe(4.25);
@@ -237,11 +433,29 @@ describe("OriginChainClient", () => {
     const url = new URL(calls[0]!.url);
     expect(url.pathname).toBe("/v1/tenants/tnt-test/graph/network/dijkstra");
     expect(JSON.parse(url.searchParams.get("weights_json")!)).toEqual({
-      cost: 1,
-      latency: 0.5,
+      "n1|n3": 1,
+      "n3|n5": 3.25,
     });
     // Dijkstra is GET - no body should be sent.
     expect(calls[0]!.init.body).toBeUndefined();
+  });
+
+  it("edgeWeightKey builds the `from|to` key the engine looks weights up by", () => {
+    expect(edgeWeightKey("n1", "n5")).toBe("n1|n5");
+  });
+
+  it("graph.dijkstra surfaces cost: null for an unreachable destination", async () => {
+    // `cost` is `Option<f64>` WITHOUT skip_serializing_if, so the key is
+    // always present and explicitly null - not omitted.
+    const { fetch } = mockFetch(200, { cost: null });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const r = await oc.graph.dijkstra("network", {
+      rel: "edge",
+      src: "n1",
+      dst: "n9",
+      weights: {},
+    });
+    expect(r.cost).toBeNull();
   });
 
   it("ask() POSTs to /ask with the natural-language body", async () => {
@@ -257,7 +471,59 @@ describe("OriginChainClient", () => {
 
     expect(calls[0]!.url).toBe(`${BASE}/v1/tenants/tnt-test/ask`);
     const body = JSON.parse(calls[0]!.init.body as string);
+    // The engine's field is `nl`; `question`/`prompt` are silently dropped
+    // and the request then 400s on the missing required field.
     expect(body.nl).toBe("orders for AAPL above 50 shares last week");
+  });
+
+  it("ask() exposes `explain` alongside `plan` when show_plan is set", async () => {
+    // `plan` and `explain` are gated on the SAME flag server-side - they
+    // appear and disappear together. `explain` used to be dropped on the
+    // floor because the type didn't model it.
+    const { fetch, calls } = mockFetch(200, {
+      rows: [],
+      cache: "hit",
+      plan: { op: "Scan" },
+      explain: { op: "Scan", rows: 0 },
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const r = await oc.ask("anything", { show_plan: true });
+
+    expect(r.cache).toBe("hit");
+    expect(r.plan).toEqual({ op: "Scan" });
+    expect(r.explain).toEqual({ op: "Scan", rows: 0 });
+    expect(JSON.parse(calls[0]!.init.body as string).show_plan).toBe(true);
+  });
+
+  it("usage() surfaces the addon_calls gate counters", async () => {
+    const { fetch } = mockFetch(200, {
+      tenant: "tnt-test",
+      used: { store_keys: 1 },
+      schemas: [],
+      addon_calls: [{ addon: "vector-search", allowed: 12, rejected: 3 }],
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const u = await oc.usage();
+    expect(u.addon_calls).toEqual([
+      { addon: "vector-search", allowed: 12, rejected: 3 },
+    ]);
+  });
+
+  it("registerSchema surfaces geo_fields when the manifest declared [[geo]]", async () => {
+    const { fetch, calls } = mockFetch(200, {
+      id: "demo.places",
+      tenant: "tnt-test",
+      geo_fields: ["location"],
+    });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const r = await oc.registerSchema('namespace = "demo"');
+
+    expect(r.id).toBe("demo.places");
+    expect(r.geo_fields).toEqual(["location"]);
+    // The manifest goes up as raw TOML, not JSON.
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers["content-type"]).toBe("text/plain");
+    expect(calls[0]!.init.body).toBe('namespace = "demo"');
   });
 
   it("maps a 402 add-on body into OCAddonRequiredError", async () => {
