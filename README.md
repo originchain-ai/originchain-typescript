@@ -35,6 +35,13 @@ if (resp.kind === "select") {
 }
 ```
 
+`sql()` returns a discriminated union on `kind` covering every shape the
+engine answers with — `select`, `insert`, `update`, `delete`, `explain`,
+`tx`, `buffered`, and the DDL results (`createtable`, `altertable`,
+`createindex`, `createview`, `createsequence`, `createprocedure`,
+`createfunction`, and their `drop*` counterparts). Narrow on `kind` before
+reading variant fields.
+
 Every SQL `SELECT` must reference a table — the engine rejects bare
 expressions like `SELECT 1`.
 
@@ -107,14 +114,26 @@ const ranked = await oc.ftsSearch("articles", "body", {
 ## Graph
 
 ```ts
+import { edgeWeightKey } from "@originchain/sdk";
+
 const path = await oc.graph.dijkstra("network", {
   rel: "edge",
   src: "n1",
   dst: "n5",
-  weights: { cost: 1, latency: 0.5 },
+  // PER-EDGE weights, keyed `${from_pk}|${to_pk}`.
+  weights: {
+    [edgeWeightKey("n1", "n3")]: 1,
+    [edgeWeightKey("n3", "n5")]: 3.25,
+  },
 });
-console.log(path.cost); // number | null
+console.log(path.cost); // number | null - null when dst is unreachable
 ```
+
+`weights` is a per-edge map, **not** a map of relation or column names. The
+engine skips any edge the map doesn't cover, so a wrongly-keyed map reports
+every destination as unreachable (`cost: null`) instead of erroring.
+
+`bfs` and `path` default to `max_depth: 3` server-side when you omit it.
 
 Other graph methods: `neighbors`, `reverseNeighbors`, `bfs`, `path`.
 

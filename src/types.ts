@@ -345,6 +345,14 @@ export type SchemaUsage = {
   segments: number;
 };
 
+/** Per-add-on entitlement-gate counters from `/usage`: how many calls the
+ * gate `allowed` versus `rejected` (402'd) for that add-on. */
+export type AddonCallUsage = {
+  addon: string;
+  allowed: number;
+  rejected: number;
+};
+
 /** Response of the engine's `GET /v1/tenants/:t/usage`.
  *
  * `tier` is the configuration slug
@@ -356,6 +364,10 @@ export type TenantUsage = {
   /** Configuration slug — same value as `configuration.slug`. */
   tier?: string;
   configuration?: TenantConfiguration;
+  /** Entitlement envelope for the configuration. The Enterprise "unlimited"
+   * sentinel is `u64::MAX` (18446744073709551615), which exceeds
+   * `Number.MAX_SAFE_INTEGER` — compare against a threshold rather than for
+   * equality, and never round-trip these through arithmetic. */
   limits?: Record<string, number>;
   used: {
     store_keys: number;
@@ -364,19 +376,212 @@ export type TenantUsage = {
     reactive_subscriptions?: number;
   };
   schemas: SchemaUsage[];
+  /** Per-add-on gate counters. Always present, possibly empty. */
+  addon_calls?: AddonCallUsage[];
+};
+
+// ── Engine: schemas ──────────────────────────────────────────────────────
+
+/** Result of registering a manifest with `POST /v1/tenants/:t/schemas`.
+ * `geo_fields` is present only when the manifest declared `[[geo]]` blocks
+ * and lists the columns that got a geo index. */
+export type SchemaRegisterResponse = {
+  id: string;
+  tenant: string;
+  geo_fields?: string[];
 };
 
 // ── Engine: SQL ──────────────────────────────────────────────────────────
 
 export type SqlReq = { sql: string; params?: unknown[] };
-export type SqlSelect = { kind: "select"; rows: unknown[] };
-export type SqlInsert = { kind: "insert"; schema: string; rows: unknown[] };
-export type SqlDelete = { kind: "delete"; schema: string; pk: string };
-export type SqlResp = SqlSelect | SqlInsert | SqlDelete;
+
+// `POST /v1/tenants/:t/sql` answers with an INTERNALLY-TAGGED union: the
+// engine's `SqlResp` is `#[serde(tag = "kind", rename_all = "lowercase")]`,
+// so the discriminant lives in a `kind` field alongside the variant's own
+// fields, and multi-word variants lowercase WITHOUT a separator
+// (`CreateTable` → `"createtable"`, not `"create_table"`).
+//
+// Every field the engine marks `skip_serializing_if = "Option::is_none"` /
+// `"Vec::is_empty"` is OMITTED from the wire, so it is optional here. Fields
+// without that attribute are always present. Keep this in lockstep with
+// `backend/crates/oc-http/src/preview_endpoints.rs::SqlResp`.
+
+/** `EXPLAIN` / `DESCRIBE` / `DESC`. `plan` is the pretty-printed plan tree;
+ * `stats` carries per-operator runtime stats and is present only for
+ * `EXPLAIN ANALYZE`. */
+export type SqlExplain = {
+  kind: "explain";
+  plan: string;
+  stats?: Record<string, unknown>;
+};
+
+/** `SELECT`. `columns` lists the output columns in projection (SELECT-list)
+ * order and is omitted when the plan declares no static order — a `SELECT *`,
+ * a join-`*`, or a set-op. Decode rows positionally off `columns` when it is
+ * present; JSON object key order is not the projection order. */
+export type SqlSelect = {
+  kind: "select";
+  rows: unknown[];
+  columns?: string[];
+};
+
+/** `INSERT`. `inserted` is always present and counts NEWLY-inserted rows only.
+ * `updated` / `skipped` appear only on `ON CONFLICT DO UPDATE` / `DO NOTHING`.
+ * `returning` + `rows` appear exactly together, only for `INSERT … RETURNING`. */
+export type SqlInsert = {
+  kind: "insert";
+  schema: string;
+  inserted: number;
+  updated?: number;
+  skipped?: number;
+  returning?: string[];
+  rows?: unknown[];
+};
+
+/** `DELETE`. `pk` is present ONLY on the `WHERE <pk> = <literal>` fastpath —
+ * a scan-predicate delete has no single row key and the engine omits the
+ * field. `rows_affected` is set outside a transaction, `rows_buffered` inside
+ * one; they are mutually exclusive. `returning` + `rows` appear exactly
+ * together, only for `DELETE … RETURNING`. */
+export type SqlDelete = {
+  kind: "delete";
+  schema: string;
+  pk?: string;
+  returning?: string[];
+  rows?: unknown[];
+  rows_buffered?: number;
+  rows_affected?: number;
+};
+
+/** `UPDATE`. `returning` is reserved — the translator refuses
+ * `UPDATE … RETURNING` today, so it is always absent. */
+export type SqlUpdate = {
+  kind: "update";
+  schema: string;
+  rows_affected: number;
+  returning?: string[];
+};
+
+/** A write inside a transaction whose table is owned by a peer node. The
+ * statement was buffered verbatim; the owning node validates it at COMMIT,
+ * so constraint errors surface as a 409 on COMMIT, not here. */
+export type SqlBuffered = { kind: "buffered"; schema: string; shard: number };
+
+/** `BEGIN` / `COMMIT` / `ROLLBACK`. `ops_committed` is populated on commit so
+ * the caller can confirm the buffer wasn't empty. */
+export type SqlTx = {
+  kind: "tx";
+  op: "begin" | "commit" | "rollback" | "noop";
+  ops_committed: number;
+  session_id: string;
+};
+
+/** `CREATE TABLE`. `schema` is the registered `<namespace>.<table>` id. */
+export type SqlCreateTable = { kind: "createtable"; schema: string };
+
+/** `DROP TABLE`. `dropped` is `false` only for `IF EXISTS` on a table that
+ * wasn't registered. */
+export type SqlDropTable = {
+  kind: "droptable";
+  schema: string;
+  dropped: boolean;
+};
+
+/** `ALTER TABLE`. Driven to completion synchronously: when this returns the
+ * schema change is live. `state` is `"Completed"`, or `"noop"` (with an empty
+ * `migration`) when every op was already satisfied. */
+export type SqlAlterTable = {
+  kind: "altertable";
+  schema: string;
+  migration: string;
+  state: string;
+  ops: number;
+};
+
+/** `CREATE INDEX`. `rows_indexed` counts the existing rows backfilled;
+ * `created` is `false` only for `IF NOT EXISTS` on an existing index. */
+export type SqlCreateIndex = {
+  kind: "createindex";
+  schema: string;
+  index: string;
+  rows_indexed: number;
+  created: boolean;
+};
+
+/** `CREATE VIEW`. `replaced` is `true` when `CREATE OR REPLACE VIEW`
+ * overwrote an existing definition. */
+export type SqlCreateView = { kind: "createview"; view: string; replaced: boolean };
+
+/** `DROP VIEW`. */
+export type SqlDropView = { kind: "dropview"; view: string; dropped: boolean };
+
+/** `CREATE SEQUENCE`. */
+export type SqlCreateSequence = {
+  kind: "createsequence";
+  sequence: string;
+  created: boolean;
+};
+
+/** `DROP SEQUENCE`. */
+export type SqlDropSequence = {
+  kind: "dropsequence";
+  sequence: string;
+  dropped: boolean;
+};
+
+/** `CREATE PROCEDURE`. */
+export type SqlCreateProcedure = { kind: "createprocedure"; name: string };
+
+/** `DROP PROCEDURE`. */
+export type SqlDropProcedure = {
+  kind: "dropprocedure";
+  name: string;
+  dropped: boolean;
+};
+
+/** `CREATE FUNCTION` (scalar SQL UDF). */
+export type SqlCreateFunction = { kind: "createfunction"; name: string };
+
+/** `DROP FUNCTION`. */
+export type SqlDropFunction = {
+  kind: "dropfunction";
+  name: string;
+  dropped: boolean;
+};
+
+/** Every shape `POST /v1/tenants/:t/sql` can answer with, discriminated on
+ * `kind`. Narrow with `switch (resp.kind)` / `if (resp.kind === …)`. */
+export type SqlResp =
+  | SqlExplain
+  | SqlSelect
+  | SqlInsert
+  | SqlDelete
+  | SqlUpdate
+  | SqlBuffered
+  | SqlTx
+  | SqlCreateTable
+  | SqlDropTable
+  | SqlAlterTable
+  | SqlCreateIndex
+  | SqlCreateView
+  | SqlDropView
+  | SqlCreateSequence
+  | SqlDropSequence
+  | SqlCreateProcedure
+  | SqlDropProcedure
+  | SqlCreateFunction
+  | SqlDropFunction;
+
+/** The `kind` discriminant of {@link SqlResp}. */
+export type SqlRespKind = SqlResp["kind"];
 
 // ── Engine: Vector ───────────────────────────────────────────────────────
 
-export type VecMetric = "cosine" | "dot" | "l2";
+/** Distance metric for a vector table. `"l1"` is an accepted alias of
+ * `"manhattan"`. The engine lowercases the value before matching, and
+ * REJECTS anything outside this set with a 400 — notably `"euclidean"`,
+ * `"inner_product"`, and `"ip"` are NOT accepted. Defaults to `"cosine"`. */
+export type VecMetric = "cosine" | "dot" | "l2" | "manhattan" | "l1";
 
 export type VecPutReq = {
   id: string;
@@ -422,7 +627,19 @@ export type DijkstraResult = { cost: number | null };
 // ── Engine: Ask ──────────────────────────────────────────────────────────
 
 export type AskRequest = { nl: string; schemas?: string[]; show_plan?: boolean };
-export type AskResponse = { rows: unknown[]; cache: string; plan?: unknown };
+
+/** Response of `POST /v1/tenants/:t/ask`.
+ *
+ * `cache` is the planner-cache disposition and is one of exactly two values.
+ * `plan` and `explain` are gated on the SAME `show_plan` flag — both are
+ * omitted from the wire when it is false, so they appear and disappear
+ * together. */
+export type AskResponse = {
+  rows: unknown[];
+  cache: "hit" | "miss";
+  plan?: unknown;
+  explain?: unknown;
+};
 
 // ── SDK config ───────────────────────────────────────────────────────────
 
