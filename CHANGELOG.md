@@ -3,6 +3,25 @@
 All notable changes to `@originchain/sdk`. See the repo-root `CHANGELOG.md`
 for engine releases.
 
+## [0.4.1] - 2026-09-07
+
+### Changed
+
+- **Licence is now MIT.** The relicence was committed on 2026-07-21 but never
+  released, so npm served 0.4.0 as `Proprietary` for seven weeks. Anyone running
+  a licence scan against the published client saw a proprietary package. No code
+  changed with it.
+
+### Fixed
+
+- README documented the wrong option name for the tenant, so the published
+  quickstart did not work as written.
+
+### Added
+
+- A live end-to-end smoke test and the CI workflow that runs it, so a release is
+  checked against a real engine rather than only against types.
+
 ## [0.4.0] - 2026-07-15
 
 ### Added

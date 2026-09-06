@@ -1,6 +1,6 @@
 {
   "name": "@originchain/sdk",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Official TypeScript / JavaScript client for OriginChain - managed database for AI applications.",
   "license": "MIT",
   "author": "Silicoyn Technologies <support@originchain.ai>",
