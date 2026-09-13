@@ -774,7 +774,7 @@ class InstancesMethods {
   get(id: string) {
     return this.p._request<Instance>(`/v1/instances/${id}`);
   }
-  /** The EC2 nodes (shard writers + HA standbys) backing this instance. */
+  /** The compute nodes (shard writers + HA standbys) backing this instance. */
   nodes(id: string) {
     return this.p._request<InstanceNode[]>(`/v1/instances/${id}/nodes`);
   }

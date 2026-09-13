@@ -69,7 +69,7 @@ export type Instance = {
   resilience?: "single" | "ha" | "multi" | string;
 };
 
-/** One EC2 node (shard writer or standby) backing an instance.
+/** One compute node (shard writer or standby) backing an instance.
  * From GET /v1/instances/:id/nodes. */
 export type InstanceNode = {
   instance_id: string;
@@ -80,7 +80,7 @@ export type InstanceNode = {
   private_ip: string | null;
   public_ip: string | null;
   az: string | null;
-  /** EC2 lifecycle state ("running", "stopped", …). */
+  /** Node lifecycle state ("running", "stopped", …). */
   state: string;
   name: string;
 };
@@ -284,7 +284,7 @@ export type MetricsSummaryResponse = {
   storage: StorageBreakdown;
 };
 
-/** One sealed segment / checkpoint shipped to S3 by `oc-pitr`. Mirrors
+/** One sealed segment / checkpoint shipped to object storage by `oc-pitr`. Mirrors
  * `observe::handlers::ArchiveSegment`. */
 export type ArchiveSegment = {
   lsn_start: number;
