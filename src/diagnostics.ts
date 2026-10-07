@@ -14,7 +14,7 @@
 // most once a second in batches of up to 32, and any failure to send is ignored.
 
 /** The SDK version reported with diagnostics; kept equal to package.json by a test. */
-export const SDK_VERSION = "0.5.0";
+export const SDK_VERSION = "0.5.1";
 
 export const DIAGNOSTICS_PATH_SUFFIX = "/diagnostics";
 const MAX_QUEUE = 256;

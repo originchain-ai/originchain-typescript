@@ -46,7 +46,15 @@ function engine(status = 200, body: unknown = { kind: "select", rows: [] }) {
 
 afterEach(() => {
   delete (globalThis as { document?: unknown }).document;
+  delete (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope;
 });
+
+/** A browser worker's global scope: `globalThis` is an instance of it. */
+function asBrowserWorker(isInstance: boolean): void {
+  const scope = function WorkerGlobalScope() {} as unknown as { [Symbol.hasInstance]: unknown };
+  Object.defineProperty(scope, Symbol.hasInstance, { value: (o: unknown) => isInstance && o === globalThis });
+  (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope = scope;
+}
 
 describe("request correlation", () => {
   it("sends a fresh logical request id and attempt 1 on every call", async () => {
@@ -98,6 +106,25 @@ describe("request correlation", () => {
     expect(calls[0]!.headers["x-oc-logical-request-id"]).toBeUndefined();
     expect(calls[0]!.headers["x-oc-attempt"]).toBeUndefined();
     expect(err.requestId).toBe(ENGINE_ID);
+  });
+
+  it("does not send the correlation headers from a browser worker, which has no document", async () => {
+    asBrowserWorker(true);
+    const { fetch, calls } = engine(500, { error: "internal" });
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    const err = (await oc.sql("SELECT 1").catch((e: unknown) => e)) as ApiError;
+    expect(calls[0]!.headers["x-oc-logical-request-id"]).toBeUndefined();
+    expect(calls[0]!.headers["x-oc-attempt"]).toBeUndefined();
+    expect(err.requestId).toBe(ENGINE_ID);
+  });
+
+  it("still sends them where WorkerGlobalScope exists but this is not a worker", async () => {
+    asBrowserWorker(false);
+    const { fetch, calls } = engine();
+    const oc = new OriginChainClient({ baseUrl: BASE, bearer: BEARER, fetch });
+    await oc.sql("SELECT 1");
+    expect(calls[0]!.headers["x-oc-logical-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(calls[0]!.headers["x-oc-attempt"]).toBe("1");
   });
 });
 

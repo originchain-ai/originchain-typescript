@@ -5,6 +5,17 @@ for engine releases.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-07
+
+### Fixed
+
+- **Browser workers no longer send the correlation headers.** A web, shared or
+  service worker has no `document`, so 0.5.0 treated it as a server and sent
+  `x-oc-logical-request-id` and `x-oc-attempt`. In a browser those custom headers
+  need the engine's CORS allow-list, and on an engine that predates them every
+  call from the worker failed its preflight. Workers are now recognised by their
+  global scope, like a page. Error request ids are unchanged.
+
 ## [0.5.0] - 2026-10-07
 
 ### Added

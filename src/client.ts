@@ -168,10 +168,14 @@ function newIdempotencyKey(): string {
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** True in a browser (or a browser-like worker with a DOM), where every custom
- * request header must be on the engine's CORS allow-list. */
+/** True in a browser page or a browser worker (web, shared or service worker),
+ * where every custom request header must be on the engine's CORS allow-list. A
+ * worker has no `document`, so it is recognised by its global scope. */
 function inBrowser(): boolean {
-  return typeof (globalThis as { document?: unknown }).document !== "undefined";
+  const g = globalThis as { document?: unknown; WorkerGlobalScope?: unknown };
+  if (typeof g.document !== "undefined") return true;
+  const scope = g.WorkerGlobalScope;
+  return typeof scope === "function" && globalThis instanceof scope;
 }
 
 async function readBody(res: Response): Promise<unknown> {
